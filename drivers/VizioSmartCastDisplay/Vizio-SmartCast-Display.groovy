@@ -18,7 +18,9 @@
  *    ----        ---             ----
  *    2020-01-28  Mike Cerwin     v0.01 - Initial Release
  *    2020-02-21  Mike Cerwin     v0.02 - Added Input Child Device Functionality
- * 
+ *    2021-03-03  Karl Lohner     Update various methods to iterate over responses, logging changes, modify children input naming
+ *
+ *  See https://github.com/exiva/Vizio_SmartCast_API for more API info
  */
 metadata {
     definition (name: "Vizio SmartCast Display", namespace: "DixieChckn", author: "Mike Cerwin", , importUrl: "https://raw.githubusercontent.com/DixieChckn/Hubitat/master/drivers/VizioSmartCastDisplay/Vizio-SmartCast-Display.groovy") {
@@ -320,106 +322,128 @@ def volumeDown() {
 }
 
 def setVolume(volumelevel) {
-    
+
     if (logEnable) log.debug "Requesting Volume Status from [${deviceIp}:${devicePort}]"
-    
-        //Build Volume Status Request Parameters
-        def volRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    
+
+    //Build Volume Status Request Parameters
+    def volRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+
     if(logEnable)log.debug "volumeStatus Request JSON: ${paramsForVd}"
-    
+
     try{
         //Send Volume Status Request
         httpGet(volRequestParams) { resp ->
-                    if (resp.success) {
-                		volHash = resp.data.ITEMS[8].HASHVAL
-                        if(logEnable){ 
-                            log.debug "Volume Hash Value: ${volHash}"
-                            log.debug "Volume Level Value: ${volumelevel}"
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Audio Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "volume") {
+                            volHash = it.HASHVAL
+                            if(logEnable){ 
+                                log.debug "Volume Hash Value: ${volHash}"
+                            }
+
                         }
+                    }
+                }
+                if(logEnable){
+                    log.debug "Current Volume: ${device.currentValue("volume")}"
+                }
             }
-            
-       if (logEnable)log.debug "volumeStatus Response JSON: ${resp.data}"     
-            
-         }
-      } catch (Exception e) {
+        }
+    } catch (Exception e) {
         log.warn "Volume Status Request Failed: ${e.message}"
     }
-    
+
     if (logEnable) log.debug "Sending Set Volume to [${deviceIp}:${devicePort}]"
-    
-        //Build Set Volume Parameters
-        def paramsForSetVol =[
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio/volume",
-          headers: ["AUTH": "${state.authCode}"],  
-	      contentType: "application/json",
-          body: "{\"REQUEST\": \"MODIFY\", \"VALUE\": ${volumelevel}, \"HASHVAL\": ${volHash}}",
-          ignoreSSLIssues: true    
-          ]
-    
+
+    //Build Set Volume Parameters
+    def paramsForSetVol =[
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio/volume",
+        headers: ["AUTH": "${state.authCode}"],  
+        contentType: "application/json",
+        body: "{\"REQUEST\": \"MODIFY\", \"VALUE\": ${volumelevel}, \"HASHVAL\": ${volHash}}",
+        ignoreSSLIssues: true    
+    ]
+
     if(logEnable)log.debug "setVolume Request JSON: ${paramsForSetVol}"
-    
+
     //Send Set Volume Command
     try {
         httpPut(paramsForSetVol) { resp ->
-            
-             if (logEnable) log.debug "volumeSet Response JSON: ${resp.data}"
+
+            if (logEnable) log.debug "volumeSet Response JSON: ${resp.data}"
         }
-     } catch (Exception e) {
+    } catch (Exception e) {
         log.warn "Set Volume Command Failed: ${e.message}"
-   }
+    }
 }
 
 def mute() {
     
     if (logEnable) log.debug "Requesting Mute Status from [${deviceIp}:${devicePort}]"
     
-        //Build Mute Status Request parameters
-        def muteRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    
-    if(logEnable)log.debug "mute Status Request JSON: ${muteRequestParams}"
-    
-    try{
+    //Build Mute Status Request parameters
+    def muteRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+
+    if (logEnable) log.debug "mute Status Request JSON: ${muteRequestParams}"
+
+    try {
         //Send Mute Status Request
         httpGet(muteRequestParams) { resp ->
-                    if (resp.success) {
-                		muteStatus = resp.data.ITEMS[9].VALUE.toLowerCase()
-                        if (logEnable) log.debug "MuteStatus: ${muteStatus}"                                     
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Mute Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "mute") {
+                            muteStatus = it.VALUE.toLowerCase()
+                        }
+                    }
+                }
+                if (logEnable) log.debug "MuteStatus: ${muteStatus}"                                     
             }
-            
-            if (logEnable) log.debug "mute Status Response JSON: ${resp.data}"
         }
     } catch (Exception e) {
         log.warn "Mute Status Request Failed: ${e.message}"
-   }
+    }
      
     if (logEnable) log.debug "Sending Mute Command to [${deviceIp}:${devicePort}]"
     
-        //Build Mute Parameters
-        def paramsForMute =[
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/key_command/",
-          headers: ["AUTH": "${state.authCode}"],  
-	      contentType: "application/json",
-          body: "{\"KEYLIST\":[{\"CODESET\": 5, \"CODE\": 3, \"ACTION\": \"KEYPRESS\"}]}",
-          ignoreSSLIssues: true
-          ]
-    
+    //Build Mute Parameters
+    def paramsForMute =[
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/key_command/",
+        headers: ["AUTH": "${state.authCode}"],  
+        contentType: "application/json",
+        body: "{\"KEYLIST\":[{\"CODESET\": 5, \"CODE\": 3, \"ACTION\": \"KEYPRESS\"}]}",
+        ignoreSSLIssues: true
+    ]
+
     if(logEnable)log.debug "mute Request JSON: ${paramsForMute}"
     
     //Send Mute Command
@@ -439,391 +463,335 @@ def mute() {
 }
 
 def unmute() {
-    
+
     if (logEnable) log.debug "Sending Unmute Status request to [${deviceIp}:${devicePort}]"
-    
-        //Build Unmute Status Request parameters
-        def unmuteRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    
-        if(logEnable)log.debug "unmute Status Request JSON: ${muteRequestParams}"    
-    
+
+    //Build Unmute Status Request parameters
+    def unmuteRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+
+    if(logEnable)log.debug "unmute Status Request JSON: ${muteRequestParams}"    
+
     try{
         //Send Unmute Status Request
         httpGet(unmuteRequestParams) { resp ->
-                    if (resp.success) {
-                		muteStatus = resp.data.ITEMS[9].VALUE.toLowerCase()
-                        //log.debug "MuteStatus: ${muteStatus}"                             
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Unmute Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "mute") {
+                            muteStatus = it.VALUE.toLowerCase()
+                        }
+                    }
+                }
+                if (logEnable) log.debug "MuteStatus: ${muteStatus}"                                     
             }
-            
-            if (logEnable) log.debug "umute Status Response JSON: ${resp.data}"
         }
     } catch (Exception e) {
         log.warn "Unmute Status Request Failed: ${e.message}"
     }
-    
-     if (logEnable) log.debug "Sending Unmute Command to [${deviceIp}:${devicePort}]"
-        
-        //Build Unmute Parameters
-        def paramsForUnmute =[
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/key_command/",
-          headers: ["AUTH": "${state.authCode}"],  
-	      contentType: "application/json",
-          body: "{\"KEYLIST\":[{\"CODESET\": 5, \"CODE\": 2, \"ACTION\": \"KEYPRESS\"}]}",
-          ignoreSSLIssues: true
+
+    if (logEnable) log.debug "Sending Unmute Command to [${deviceIp}:${devicePort}]"
+
+    //Build Unmute Parameters
+    def paramsForUnmute =[
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/key_command/",
+        headers: ["AUTH": "${state.authCode}"],  
+        contentType: "application/json",
+        body: "{\"KEYLIST\":[{\"CODESET\": 5, \"CODE\": 2, \"ACTION\": \"KEYPRESS\"}]}",
+        ignoreSSLIssues: true
     ]
+
     //Send Unmute Command
     if (muteStatus == "on") {
-    try {
-        httpPut(paramsForUnmute) { resp ->
-            if (resp.success) {
-                sendEvent(name: "mute", value: "off", isStateChange: true)
+        try {
+            httpPut(paramsForUnmute) { resp ->
+                if (resp.success) {
+                    sendEvent(name: "mute", value: "off", isStateChange: true)
+                }
             }
+        } catch (Exception e) {
+            log.warn "unmute Command Failed: ${e.message}"
         }
-     } catch (Exception e) {
-        log.warn "unmute Command Failed: ${e.message}"
     }
-  }
 }
 
 def refresh() {
-    
+
     if (logEnable) log.debug "Sending Refresh Request to [${deviceIp}:${devicePort}]"
     
-        //Build Status Request Parameters - Audio
-        def audStatusRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    try{
+    //Build Status Request Parameters - Audio
+    def audStatusRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+    try {
         //Send Status Request
         httpGet(audStatusRequestParams) { resp ->
-                    if (resp.success) {
-                        
-                        if(device.currentValue("volume") != resp.data.ITEMS[8].VALUE){
-                            sendEvent(name: "volume", value: "${resp.data.ITEMS[8].VALUE}", isStateChange: true)}
-                        
-                        if(device.currentValue("mute") != resp.data.ITEMS[9].VALUE.toLowerCase()){
-                            sendEvent(name: "mute", value: "${resp.data.ITEMS[9].VALUE.toLowerCase()}", isStateChange: true)}
-                        
-                        if(logEnable){
-                            log.debug "Refresh Audio Status Response: ${resp.data}"
-                            log.debug "Current Volume: ${device.currentValue("volume")}"
-                            log.debug "Current Mute State: ${device.currentValue("mute")}"}
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Audio Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "volume") {
+                            if(device.currentValue("volume") != it.VALUE){
+                                sendEvent(name: "volume", value: "${it.VALUE}", isStateChange: true)
+                            }
+                        }
+                        if(it.CNAME == "mute") {
+                            if(device.currentValue("mute") != it.VALUE.toLowerCase()){
+                                sendEvent(name: "mute", value: "${it.VALUE.toLowerCase()}", isStateChange: true)
+                            }
+                        }
+                    }
+                }
+                if(logEnable){
+                    log.debug "Current Volume: ${device.currentValue("volume")}"
+                    log.debug "Current Mute State: ${device.currentValue("mute")}"
+                }
             }
         }
-     } catch (Exception e) {
+    } catch (Exception e) {
         log.warn "Audio Status Request Failed: ${e.message}"
-   }
+    }
         
-        //Build Power Status Request Parameters
-        def pwrStatusRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/state/device/power_mode",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true
-          ]
+    //Build Power Status Request Parameters
+    def pwrStatusRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/state/device/power_mode",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true
+    ]
     
     //Send Power Status Request
     try {
         httpGet(pwrStatusRequestParams) { resp ->
             if (resp.success) {
-                if (resp.data.ITEMS.VALUE[0] == 0 && device.currentValue("switch") == "on"){
-                        sendEvent(name: "switch", value: "off", isStateChange: true)}
-                if (resp.data.ITEMS.VALUE[0] == 1 && device.currentValue("switch") == "off"){               
-                        sendEvent(name: "switch", value: "on", isStateChange: true)}
+                if (logEnable) {
+                    log.debug "Refresh Power Status Response: ${resp.data}"
                 }
-                if(logEnable)log.debug "Power State: ${resp.data.ITEMS.VALUE[0]}"
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "power_mode") {
+                            if (it.VALUE == 0 && device.currentValue("switch") == "on") {
+                                sendEvent(name: "switch", value: "off", isStateChange: true)
+                            }
+                            else 
+                            if (it.VALUE == 1 && device.currentValue("switch") == "off") {
+                                sendEvent(name: "switch", value: "on", isStateChange: true)
+                            }
+                        }
+                    }
+                }
             }
-        
-     } catch (Exception e) {
+            if (logEnable) {
+                log.debug "Power State: ${device.currentValue("switch")}"
+            }
+        }
+    } catch (Exception e) {
         log.warn "Power Status Request Failed: ${e.message}"
-   }
+    }
+
+    //Build Input List Request Parameters
+    def inputListRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/name_input",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+    try {
+        //Send  Input List Request
+        httpGet(inputListRequestParams) { resp ->
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Name Input Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+//                        if(it.CNAME == "current_input") {
+//                            if(device.currentValue("input") != it.VALUE) {
+//                                sendEvent(name: "input", value: "${it.VALUE}", isStateChange: true)
+//                            }
+//                        }
+                    }
+                }
+            }
+            if (logEnable) {
+//                log.debug "Name Input: ${device.currentValue("input")}"
+            }
+        }
+    } catch (Exception e) {
+        log.warn "Current Input Status Request Failed: ${e.message}"
+    }
     
-            //Build Current Input Hash Request Parameters
-        def currentInputRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",,
-          path: "/menu_native/dynamic/tv_settings/devices/current_input",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    try{
+    
+    //Build Current Input Hash Request Parameters
+    def currentInputRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/current_input",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+    try {
         //Send Current Input Hash Request
         httpGet(currentInputRequestParams) { resp ->
-                    if (resp.success) {
-                        if(device.currentValue("input") != resp.data.ITEMS[0].VALUE){
-                        sendEvent(name: "input", value: "${resp.data.ITEMS[0].VALUE}", isStateChange: true)}
-                        if(logEnable){log.debug "currentInput Response: ${resp.data}"}
-                        if(logEnable){log.debug "Current Input Hash: ${currentHashVal}"}
-                                      }
-                                           }
-     } catch (Exception e) {
-        log.warn "Current Input Hash Request Failed: ${e.message}"
-                           } 
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Current Input Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "current_input") {
+                            if(device.currentValue("input") != it.VALUE) {
+                                sendEvent(name: "input", value: "${it.VALUE}", isStateChange: true)
+                            }
+                        }
+                    }
+                }
+            }
+            if (logEnable) {
+                log.debug "Current Input: ${device.currentValue("input")}"
+            }
+        }
+    } catch (Exception e) {
+        log.warn "Current Input Status Request Failed: ${e.message}"
+    }
 }
 
 def refreshVol() {
-    
+
     if (logEnable) log.debug "Sending Volume Refresh Request to [${deviceIp}:${devicePort}]"
-    
-        //Build Status Request Parameters - Audio
-        def audStatusRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/audio/volume",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    try{
+
+    //Build Status Request Parameters - Audio
+    def audStatusRequestParams = [ 
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/audio/volume",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+    try {
         //Send Status Request - Audio
         httpGet(audStatusRequestParams) { resp ->
-                    if (resp.success) {
-                       sendEvent(name: "volume", value: "${resp.data.ITEMS.VALUE[0]}", isStateChange: true)
-                        
-                        if(logEnable){
-                            log.debug "Refesh Audio Status Response: ${resp.data}"
-                            log.debug "Current Volume: ${device.currentValue("volume")}"}
-
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Audio Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        // log.debug "${it.CNAME}: ${it.VALUE}"
+                        if(it.CNAME == "volume") {
+                            if(device.currentValue("volume") != it.VALUE){
+                                sendEvent(name: "volume", value: "${it.VALUE}", isStateChange: true)
+                            }
+                        }
+                    }
+                }
+                if(logEnable){
+                    log.debug "Current Volume: ${device.currentValue("volume")}"
+                }
             }
         }
-     } catch (Exception e) {
+    } catch (Exception e) {
         log.warn "Audio Status Request Failed: ${e.message}"
-   } 
+    } 
 }
 
 
 def createChildDevices() {
     
-    def displayInput0 = "${device.deviceNetworkId}-input0"
-    def displayInput1 = "${device.deviceNetworkId}-input1"
-    def displayInput2 = "${device.deviceNetworkId}-input2"
-    def displayInput3 = "${device.deviceNetworkId}-input3"
-    def displayInput4 = "${device.deviceNetworkId}-input4"
-    def displayInput5 = "${device.deviceNetworkId}-input5"
-    def displayInput6 = "${device.deviceNetworkId}-input6"
-    def displayInput7 = "${device.deviceNetworkId}-input7"
-    def displayInput8 = "${device.deviceNetworkId}-input8"
-    def displayInput9 = "${device.deviceNetworkId}-input9"
-    
     if (logEnable) log.debug "Sending Input List Request to [${deviceIp}:${devicePort}]"
-    
-        //Build Input List Request Parameters
+
+    //Build Input List Request Parameters
     def inputListRequestParams = [ 
-          uri: "https://${deviceIp}:${devicePort}",
-          path: "/menu_native/dynamic/tv_settings/devices/name_input",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${state.authCode}"],
-          ignoreSSLIssues: true 
-          ]
+        uri: "https://${deviceIp}:${devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/name_input",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${state.authCode}"],
+        ignoreSSLIssues: true 
+    ]
     try{
         //Send  Input List Request
         httpGet(inputListRequestParams) { resp ->
-                    if (resp.success) {
-                        
-                        try{
-                            if(resp.data.ITEMS[0].NAME){
-                                input0Name = resp.data.ITEMS[0].NAME}
-                        }catch(Exception e0){if(logEnable){log.error "Create Input Child Device Failed: ${e0.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[1].NAME){
-                                input1Name = resp.data.ITEMS[1].NAME}
-                        }catch(Exception e1){if(logEnable){log.error "Create Input Child Device Failed: ${e1.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[2].NAME){
-                                input2Name = resp.data.ITEMS[2].NAME}
-                        }catch(Exception e2){if(logEnable){log.error "Create Input Child Device Failed: ${e2.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[3].NAME){
-                                input3Name = resp.data.ITEMS[3].NAME}
-                        }catch(Exception e3){if(logEnable){log.error "Create Input Child Device Failed: ${e3.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[4].NAME){
-                                input4Name = resp.data.ITEMS[4].NAME}
-                        }catch(Exception e4){if(logEnable){log.error "Create Input Child Device Failed: ${e4.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[5].NAME){
-                                input5Name = resp.data.ITEMS[5].NAME}
-                        }catch(Exception e5){if(logEnable){log.error "Create Input Child Device Failed: ${e5.message}"}}
-                        
-                        
-                        try{
-                            if(resp.data.ITEMS[6].NAME){
-                                input6Name = resp.data.ITEMS[6].NAME}
-                        }catch(Exception e6){if(logEnable){log.error "Create Input Child Device Failed: ${e6.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[7].NAME){
-                                input7Name = resp.data.ITEMS[7].NAME}
-                        }catch(Exception e7){if(logEnable){log.error "Create Input Child Device Failed: ${e7.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[8].NAME){
-                                input8Name = resp.data.ITEMS[8].NAME}
-                        }catch(Exception e8){if(logEnable){log.error "Create Input Child Device Failed: ${e8.message}"}}
-                        
-                        try{
-                            if(resp.data.ITEMS[9].NAME){
-                                input9Name = resp.data.ITEMS[9].NAME}
-                        }catch(Exception e9){if(logEnable){log.error "Create Input Child Device Failed: ${e9.message}"}}
-                        
-                        if(logEnable){log.debug "inputList Response: ${resp.data}"}  
-                        
+            if (resp.success) {
+                if (logEnable) {
+                    log.debug "Refresh Name Input Status Response: ${resp.data}"
+                }
+                List seqList = resp.data.ITEMS
+                // Example item which has been renamed to "Cable TV" using the TV remote
+                //    [
+                //        "HASHVAL":1171194620,
+                //        "CNAME":hdmi1,
+                //        "NAME":HDMI-1,
+                //        "TYPE":T_DEVICE_V1,
+                //        "ENABLED":false,
+                //        "VALUE":[
+                //            "NAME":"Cable TV",
+                //            "METADATA":
+                //        ]
+                //    ],                
+
+                // log.debug "seqList: ${seqList}"
+                if(seqList?.size()) {
+                    seqList.each {
+                        if (logEnable) {
+                            log.debug "Input: ${it}"
+                        }
+                        deviceNetworkID = "${device.deviceNetworkId}-input-${it.NAME}"
+                        if (!getChildDevice(deviceNetworkID)) {
+                            try {
+                                def dev = addChildDevice("Vizio SmartCast Input", deviceNetworkID,
+                                                         ["label": "${device.displayName} - ${it.NAME} (${it.VALUE.NAME})",
+                                                          "isComponent": false])
+
+                            } catch (Exception e) {
+                                log.error "Error creating SmartCast Input child device: $e"
+                            } 
+                        }
+                    }
+                } 
             }
         }
-     } catch (Exception e) {
+    } catch (Exception e) {
         log.warn "inputList Request Failed: ${e.message}"
-   } 
-    
-    if(input0Name){
-        if (!getChildDevice(displayInput0)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput0,
-                                         ["label": "${device.displayName}-${input0Name}",
-                                 "isComponent": false])
-
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-
-    if(input1Name){
-        if (!getChildDevice(displayInput1)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput1,
-                                         ["label": "${device.displayName}-${input1Name}",
-                                 "isComponent": false])
-
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-    
-    
-     if(input2Name){
-        if (!getChildDevice(displayInput2)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput2,
-                                         ["label": "${device.displayName}-${input2Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-
-     if(input3Name){
-        if (!getChildDevice(displayInput3)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput3,
-                                         ["label": "${device.displayName}-${input3Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-    
-     if(input4Name){
-        if (!getChildDevice(displayInput4)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput4,
-                                         ["label": "${device.displayName}-${input4Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-     }
-    
-     if(input5Name){
-        if (!getChildDevice(displayInput5)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput5,
-                                         ["label": "${device.displayName}-${input5Name}",
-                                 "isComponent": false])
-     
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-    
-     if(input6Name){
-        if (!getChildDevice(displayInput6)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput6,
-                                         ["label": "${device.displayName}-${input6Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-    
-     if(input7Name){
-        if (!getChildDevice(displayInput7)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput7,
-                                         ["label": "${device.displayName}-${input7Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-    
-     if(input8Name){
-        if (!getChildDevice(displayInput8)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput8,
-                                         ["label": "${device.displayName}-${input8Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
-
-    if(input9Name){
-        if (!getChildDevice(displayInput9)) {
-            try {
-                def dev = addChildDevice("Vizio SmartCast Input", displayInput9,
-                                         ["label": "${device.displayName}-${input9Name}",
-                                 "isComponent": false])
-                
-            } catch (Exception e) {
-                log.error "Error creating SmartCast Input child device: $e"
-            } 
-        }
-    }
+    } 
 }
