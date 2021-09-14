@@ -50,84 +50,86 @@ def updated() {
 
 def push() {
     
-    def index = (device.deviceNetworkId.indexOf('input'))
-    def jsonId = (device.deviceNetworkId.substring(index+5)) as int
+    def index = (device.deviceNetworkId.indexOf('-input-'))
+    def inputName = (device.deviceNetworkId.substring(index+7))
     sendEvent(name: "switch", value: "on", isStateChange: true)
     runIn(1, toggleOff)
-    if(logEnable){log.debug "jsonId: ${jsonId}"}
+    if(logEnable){log.debug "Input Name: ${inputName}"}
     if(logEnable){log.debug "${parent.getState()?.authCode}"}
     if(logEnable){log.debug "${parent.getState()?.devicePort}"}
     if(logEnable){log.debug "${parent.getState()?.deviceIp}"}
     
     if(logEnable){log.debug "Sending Current Input Hash Request to [${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}]"}
-    
-        //Build Current Input Hash Request Parameters
-        def currentInputRequestParams = [ 
-          uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
-          path: "/menu_native/dynamic/tv_settings/devices/current_input",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${parent.getState()?.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    try{
+
+    //Build Current Input Hash Request Parameters
+    def currentInputRequestParams = [ 
+        uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/current_input",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${parent.getState()?.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+    try {
         //Send Current Input Hash Request
         httpGet(currentInputRequestParams) { resp ->
-                    if (resp.success) {
-                        currentHashVal = resp.data.ITEMS[0].HASHVAL
-                        if(logEnable){log.debug "currentInput Response: ${resp.data}"}
-                        if(logEnable){log.debug "Current Input Hash: ${currentHashVal}"}
-                                      }
-                                           }
-     } catch (Exception e) {
-        log.warn "Current Input Hash Request Failed: ${e.message}"
-                           } 
-    
-        //Build New Input Value Request Parameters
-        def newHashRequestParams = [ 
-          uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
-          path: "/menu_native/dynamic/tv_settings/devices/name_input",
-          contentType: "application/json",
-          requestContentType: "application/json",
-          headers: ["AUTH": "${parent.getState()?.authCode}"],
-          ignoreSSLIssues: true 
-          ]
-    
-        try{
-            //Send New Input Value Request
-            httpGet(newHashRequestParams) { resp ->
-                    if (resp.success) {
-                        newInputValue = resp.data.ITEMS[jsonId].NAME                      
-                        if(logEnable){log.debug "inputList Response: ${resp.data}"}
-                        if(logEnable){log.debug "New Input Value: ${newInputValue}"}           
-                                      }
-                                          }
-     } catch (Exception e) {
-        log.warn "New Input Value Request Failed: ${e.message}"
-                           } 
-    
-        //Build Set Input Command Parameters
-        def paramsForSetInput =[
-          uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
-          path: "/menu_native/dynamic/tv_settings/devices/current_input",
-          headers: ["AUTH": "${parent.getState()?.authCode}"],  
-	      contentType: "application/json",
-          body: "{\"REQUEST\": \"MODIFY\", \"VALUE\": \"${newInputValue}\", \"HASHVAL\": ${currentHashVal}}",
-          ignoreSSLIssues: true    
-          ]
-    
-        if(logEnable)log.debug "Set Input Command JSON: ${paramsForSetInput}"
-    
-        //Send Set Input Command
-        try {
-            httpPut(paramsForSetInput) { resp ->
-               
-                if(logEnable){log.debug "Set Input Command Response JSON: ${resp.data}"}
+            if (resp.success) {
+                currentHashVal = resp.data.ITEMS[0].HASHVAL
+                if(logEnable){log.debug "currentInput Response: ${resp.data}"}
+                if(logEnable){log.debug "Current Input Hash: ${currentHashVal}"}
+            }
         }
-     } catch (Exception e) {
-        log.warn "Set Input Command Failed: ${e.message}"
-   } 
+    } catch (Exception e) {
+        log.warn "Current Input Hash Request Failed: ${e.message}"
+    } 
+
+    //Build New Input Value Request Parameters
+    def newHashRequestParams = [ 
+        uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/name_input",
+        contentType: "application/json",
+        requestContentType: "application/json",
+        headers: ["AUTH": "${parent.getState()?.authCode}"],
+        ignoreSSLIssues: true 
+    ]
+
+    try{
+        //Send New Input Value Request
+        httpGet(newHashRequestParams) { resp ->
+            if (resp.success) {
+//                newInputValue = resp.data.ITEMS[jsonId].NAME                      
+                if(logEnable){log.debug "inputList Response: ${resp.data}"}
+//                if(logEnable){log.debug "New Input Value: ${newInputValue}"}           
+            }
+        }
+    } catch (Exception e) {
+        log.warn "New Input Value Request Failed: ${e.message}"
+    } 
+
+    newInputValue = inputName     
     
+    //Build Set Input Command Parameters
+    def paramsForSetInput = [
+        uri: "https://${parent.getState()?.deviceIp}:${parent.getState()?.devicePort}",
+        path: "/menu_native/dynamic/tv_settings/devices/current_input",
+        headers: ["AUTH": "${parent.getState()?.authCode}"],  
+        contentType: "application/json",
+        body: "{\"REQUEST\": \"MODIFY\", \"VALUE\": \"${newInputValue}\", \"HASHVAL\": ${currentHashVal}}",
+        ignoreSSLIssues: true    
+    ]
+
+    if(logEnable)log.debug "Set Input Command JSON: ${paramsForSetInput}"
+
+    //Send Set Input Command
+    try {
+        httpPut(paramsForSetInput) { resp ->
+
+            if(logEnable){log.debug "Set Input Command Response JSON: ${resp.data}"}
+        }
+    } catch (Exception e) {
+        log.warn "Set Input Command Failed: ${e.message}"
+    } 
+
 } 
 
 
