@@ -17,7 +17,7 @@
  *    Date        Who             What
  *    ----        ---             ----
  *    2020-02-21  Mike Cerwin     v0.02 - Initial Release
- * 
+ *    2021-03-03  Karl Lohner     Updated input names
 **/
 
 metadata {
